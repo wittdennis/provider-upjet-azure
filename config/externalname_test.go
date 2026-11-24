@@ -113,3 +113,62 @@ func TestMSSQLManagedInstanceFailoverGroupGetIDFn(t *testing.T) {
 		})
 	}
 }
+
+func TestStorageBlobExternalName(t *testing.T) {
+	type want struct {
+		name string
+		err  string
+	}
+	cases := map[string]struct {
+		id   any
+		want want
+	}{
+		"Flat": {
+			id:   "https://example.blob.core.windows.net/example-container/example.json",
+			want: want{name: "example.json"},
+		},
+		"Nested": {
+			id:   "https://example.blob.core.windows.net/example-container/.well-known/openid-configuration",
+			want: want{name: ".well-known/openid-configuration"},
+		},
+		"NoBlobName": {
+			id:   "https://example.blob.core.windows.net/example-container/",
+			want: want{err: "invalid storage blob id: https://example.blob.core.windows.net/example-container/"},
+		},
+		"Malformed": {
+			id:   "example.json",
+			want: want{err: "invalid storage blob id: example.json"},
+		},
+	}
+
+	e := TerraformPluginSDKExternalNameConfigs["azurerm_storage_blob"]
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := e.GetExternalNameFn(map[string]any{"id": tc.id})
+			var gotErr string
+			if err != nil {
+				gotErr = err.Error()
+			}
+			if diff := cmp.Diff(tc.want.err, gotErr); diff != "" {
+				t.Errorf("GetExternalNameFn(...): -want error, +got error:\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.want.name, got); diff != "" {
+				t.Errorf("GetExternalNameFn(...): -want name, +got name:\n%s", diff)
+			}
+			if err != nil {
+				return
+			}
+			// The ID built from the external name must round-trip to the ID in the state.
+			id, err := e.GetIDFn(context.Background(), got, map[string]any{
+				"storage_account_name":   "example",
+				"storage_container_name": "example-container",
+			}, nil)
+			if err != nil {
+				t.Fatalf("GetIDFn(...): %v", err)
+			}
+			if diff := cmp.Diff(tc.id, id); diff != "" {
+				t.Errorf("GetIDFn(...): -want id, +got id:\n%s", diff)
+			}
+		})
+	}
+}

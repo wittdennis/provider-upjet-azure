@@ -2198,12 +2198,16 @@ func storageBlob() config.ExternalName {
 			return "", errors.New("id in tfstate cannot be empty")
 		}
 		// URL format: https://<account>.blob.<suffix>/<container>/<blob>
+		// <blob> may contain slashes, so everything after <container> is the name.
 		idStr, ok := id.(string)
 		if !ok {
 			return "", errors.New("id in tfstate is not a string")
 		}
-		w := strings.Split(idStr, "/")
-		return w[len(w)-1], nil
+		w := strings.SplitN(idStr, "/", 5)
+		if len(w) != 5 || w[4] == "" {
+			return "", errors.Errorf("invalid storage blob id: %s", idStr)
+		}
+		return w[4], nil
 	}
 	e.GetIDFn = func(_ context.Context, externalName string, parameters map[string]interface{}, terraformProviderConfig map[string]interface{}) (string, error) {
 		storageAccountName, err := getStorageAccountName(parameters)
